@@ -21,7 +21,7 @@ vectorizer = TfidfVectorizer(min_df=50, tokenizer=LemmaTokenizer(),stop_words=st
 
 corpus = []
 
-with open("./ag_news_csv/test.csv") as csv_test, open("./ag_news_csv/train.csv") as csv_train:
+with open("./test.csv") as csv_test, open("./train.csv") as csv_train:
 	reader_test = csv.reader(csv_test, delimiter=',', quotechar='"')
 	reader_train = csv.reader(csv_train, delimiter=',', quotechar='"')
 	
@@ -33,7 +33,7 @@ with open("./ag_news_csv/test.csv") as csv_test, open("./ag_news_csv/train.csv")
 
 X = vectorizer.fit_transform(corpus)
 
-with open("./ag_news_csv/words.txt", 'wb') as f:
+with open("./words.txt", 'wb') as f:
 	print len(vectorizer.get_feature_names())
 	for word in vectorizer.get_feature_names():
 		f.write(word+"\n")

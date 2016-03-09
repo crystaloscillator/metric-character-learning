@@ -1,8 +1,3 @@
---[[
-Main Driver for Crepe
-By Xiang Zhang @ New York University
-]]
-
 -- Necessary functionalities
 require("nn")
 require('optim')
@@ -12,7 +7,6 @@ require("data")
 require("model")
 require("train")
 require("test")
-require("gnuplot")
 require("config")
 
 require('lfs')
@@ -49,8 +43,6 @@ function main.argparse()
    cmd:option("-resume",0,"Resumption point in epoch. 0 means not resumption.")
    cmd:option("-debug",0,"debug. 0 means not debug.")
    cmd:option("-device",0,"device. 0 means cpu.")
-   --cmd:option("-format","","stk or py")
-   --cmd:option("-model","","lstm or cnn")
    cmd:text()
 
    -- Parse the option
@@ -59,24 +51,7 @@ function main.argparse()
    if opt.debug > 0 then
       dbg = require("debugger")
    end
-   --[[
-   if opt.format == "stk" and opt.model == "cnn" then
-      print("Run stroke format and cnn model...")
-      require("config_stroke_cnn")
-   elseif opt.format == "stk" and opt.model == "lstm" then
-      print("Run stroke format and lstm model...")
-      require("config_stroke_lstm")
-   elseif opt.format == "py" and opt.model == "lstm" then
-      print("Run pinyin format and lstm model...")
-      require("config_pinyin_lstm")
-   elseif opt.format == "py" and opt.model == "cnn" then
-      print("Run pinyin format and cnn model...")
-      require("config_pinyin_cnn")
-   else 
-      error("Wrong format")
-   end
-   --]]
-   -- Setting the device
+
    if opt.device > 0 then
       require("cutorch")
       require("cunn")
@@ -172,19 +147,14 @@ function main.run()
 
       print("Recording on ear " .. i)
       main.record[#main.record + 1] = {val_error = main.test_val.e, val_loss = main.test_val.l}
-      print("Visualizing loss")
-      --main.show()
+      main.show()
       main.save()
       collectgarbage()
    end
 end
 
-function main.show(figure_error, figure_loss)
-   main.figure_error = main.figure_error or gnuplot.figure()
-   main.figure_loss = main.figure_loss or gnuplot.figure()
+function main.show()
 
-   local figure_error = figure_error or main.figure_error
-   local figure_loss = figure_loss or main.figure_loss
 
    local epoch = torch.linspace(1, #main.record, #main.record):mul(config.main.epoches)
    local val_error = torch.zeros(#main.record)
@@ -216,10 +186,6 @@ function main.save()
          {config = config, record = main.record, momentum = main.train.old_grads:double()})
    torch.save(paths.concat(config.main.save,"sequential_"..(main.train.epoch-1).."_"..time..".t7b"),
          main.model:clearSequential(main.model:makeCleanSequential(main.model.sequential)))
-
-   main.eps_error = main.eps_error or gnuplot.epsfigure(paths.concat(config.main.save,"figure_error.eps"))
-   main.eps_loss = main.eps_loss or gnuplot.epsfigure(paths.concat(config.main.save,"figure_loss.eps"))
-   --main.show(main.eps_error, main.eps_loss)
 
    collectgarbage()
 end
