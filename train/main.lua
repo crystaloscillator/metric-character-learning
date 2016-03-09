@@ -3,11 +3,12 @@ require("nn")
 require('optim')
 
 -- Local requires
-require("data")
+
 require("model")
 require("train")
 require("test")
-require("config")
+require("data")
+
 
 require('lfs')
 
@@ -43,15 +44,40 @@ function main.argparse()
    cmd:option("-resume",0,"Resumption point in epoch. 0 means not resumption.")
    cmd:option("-debug",0,"debug. 0 means not debug.")
    cmd:option("-device",0,"device. 0 means cpu.")
+   cmd:option("-format","","stk or py")
+   cmd:option("-model","","lstm or cnn")
    cmd:text()
 
    -- Parse the option
-   local opt = cmd:parse(arg or {})
+   opt = cmd:parse(arg or {})
 
    if opt.debug > 0 then
       dbg = require("debugger")
    end
 
+   if opt.format == "stk" and opt.model == "cnn" then
+      print("Run stroke format and cnn model...")
+      require("config_stroke_cnn")   
+   elseif opt.format == "stk" and opt.model == "lstm" then
+      print("Run stroke format and lstm model...")
+      require("config_stroke_lstm")
+   elseif opt.format == "py" and opt.model == "lstm" then
+      print("Run pinyin format and lstm model...")
+      require("config_pinyin_lstm")
+   elseif opt.format == "py" and opt.model == "cnn" then
+      print("Run pinyin format and cnn model...")
+      require("config_pinyin_cnn")
+   elseif opt.format == "wb2d" and opt.model == "cnn" then
+      print("Run wubi format and cnn model...")
+      require("config_wb_cnn_2d")
+   elseif opt.format == "wb3d" and opt.model == "cnn" then
+      print("Run wubi format and cnn model...")
+      require("config_wb_cnn_3d")
+   else 
+      error("Wrong format")
+   end
+
+   -- Setting the device
    if opt.device > 0 then
       require("cutorch")
       require("cunn")
@@ -65,14 +91,18 @@ function main.argparse()
    -- Resumption operation
    if opt.resume > 0 then
       -- Find the main resumption file
-      local files = main.findFiles(paths.concat(config.main.save,"main_"..tostring(opt.resume).."_*.t7b"))
+      local files = main.findFiles(paths.concat(config.main.save,"main_"..tostring(opt.resume).."_"..
+       opt.format .. "_" .. opt.model .. "_" ..
+         config.train_data.length .. "_" ..config.dictsize.."_"..config.optim_name.."_*.t7b"))
       if #files ~= 1 then
     error("Found "..tostring(#files).." main resumption point.")
       end
       config.main.resume = files[1]
       print("Using main resumption point "..config.main.resume)
       -- Find the model resumption file
-      local files = main.findFiles(paths.concat(config.main.save,"sequential_"..tostring(opt.resume).."_*.t7b"))
+      local files = main.findFiles(paths.concat(config.main.save,"sequential_"..tostring(opt.resume).."_"..
+         opt.format .. "_" .. opt.model .. "_" ..
+         config.train_data.length .. "_" ..config.dictsize.."_"..config.optim_name.."_*.t7b"))
       if #files ~= 1 then
     error("Found "..tostring(#files).." model resumption point.")
       end
@@ -87,8 +117,6 @@ function main.argparse()
          print("Disabled randomization for resumption")
       end
    end
-
-   return opt
 end
 
 -- Train a new experiment
@@ -129,24 +157,37 @@ function main.run()
    for i = 1,config.main.eras do
 
       if config.main.dropout then
-	     print("Enabling dropouts")
-	     main.model:enableDropouts()
+        print("Enabling dropouts")
+        main.model:enableDropouts()
       else
-	     print("Disabling dropouts")
-	     main.model:disableDropouts()
+        print("Disabling dropouts")
+        main.model:disableDropouts()
       end
       print("Training for era "..i)
-      main.train:run(config.main.epoches, main.trainlog)
+      if opt.format == "wb3d" then
+         main.train:run_wb_3d(config.main.epoches, main.trainlog)
+      elseif opt.format == "wb2d" then
+         main.train:run_wb_2d(config.main.epoches, main.trainlog)
+      else
+         main.train:run(config.main.epoches, main.trainlog)
+      end
 
       if config.main.validate == true then
-	     print("Disabling dropouts")
+        print("Disabling dropouts")
         main.model:disableDropouts()
-	     print("Testing on develop data for era "..i)
-	     main.test_val:run(main.testlog)
+        print("Testing on develop data for era "..i)
+         if opt.format == "wb2d" then
+            main.test_val:run_wb_2d(main.testlog)
+         elseif opt.format == "wb3d" then
+            main.test_val:run_wb_3d(main.testlog)
+         else
+            main.test_val:run(main.testlog)
+         end
       end
 
       print("Recording on ear " .. i)
       main.record[#main.record + 1] = {val_error = main.test_val.e, val_loss = main.test_val.l}
+      print("Visualizing loss")
       main.show()
       main.save()
       collectgarbage()
@@ -154,7 +195,6 @@ function main.run()
 end
 
 function main.show()
-
 
    local epoch = torch.linspace(1, #main.record, #main.record):mul(config.main.epoches)
    local val_error = torch.zeros(#main.record)
@@ -182,9 +222,11 @@ function main.save()
 
    -- Make the save
    local time = os.time()
-   torch.save(paths.concat(config.main.save,"main_"..(main.train.epoch-1).."_"..time..".t7b"),
+   torch.save(paths.concat(config.main.save,"main_"..(main.train.epoch-1).."_".. opt.format .. "_" .. opt.model .. "_" ..
+      config.train_data.length .."_"..config.dictsize.."_"..config.optim_name.."_"..time..".t7b"),
          {config = config, record = main.record, momentum = main.train.old_grads:double()})
-   torch.save(paths.concat(config.main.save,"sequential_"..(main.train.epoch-1).."_"..time..".t7b"),
+   torch.save(paths.concat(config.main.save,"sequential_"..(main.train.epoch-1).."_".. opt.format .. "_" .. opt.model .. "_" ..
+      config.train_data.length .."_"..config.dictsize.."_"..config.optim_name.."_"..time..".t7b"),
          main.model:clearSequential(main.model:makeCleanSequential(main.model.sequential)))
 
    collectgarbage()
@@ -200,10 +242,10 @@ function main.trainlog(train)
    if (os.time() - main.clock.log) >= (config.main.logtime or 1) then
       local msg = ""
 
-	     msg = msg.."epo: "..(train.epoch-1)..
-	    ", rat: "..string.format("%.2e",train.rate)..
-	    ", err: "..string.format("%.2e",train.error)..
-	    ", obj: "..string.format("%.2e",train.objective)
+        msg = msg.."epo: "..(train.epoch-1)..
+       ", rat: "..string.format("%.2e",train.rate)..
+       ", err: "..string.format("%.2e",train.error)..
+       ", obj: "..string.format("%.2e",train.objective)
 
       print(msg)
    
@@ -219,10 +261,10 @@ function main.testlog(test)
    if (os.time() - main.clock.log) >= (config.main.logtime or 1) then
       
       print("n: "..test.n..
-	       ", e: "..string.format("%.2e",test.e)..
-	       ", l: "..string.format("%.2e",test.l)..
-	       ", err: "..string.format("%.2e",test.err)..
-	       ", obj: "..string.format("%.2e",test.objective))
+          ", e: "..string.format("%.2e",test.e)..
+          ", l: "..string.format("%.2e",test.l)..
+          ", err: "..string.format("%.2e",test.err)..
+          ", obj: "..string.format("%.2e",test.objective))
       main.clock.log = os.time()
    end
 end
