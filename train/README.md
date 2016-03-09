@@ -1,0 +1,1 @@
+th main.lua -format wb2d -model cnn -device 2

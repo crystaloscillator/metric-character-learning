@@ -5,11 +5,13 @@ By Xiang Zhang @ New York University
 
 -- Prerequisite
 require("nn")
+require("nngraph")
 
 -- The class
 local Model = torch.class("Model")
 
 function Model:__init(config)
+
    -- Create a sequential for self
    if config.file then
       self.sequential = Model:makeCleanSequential(torch.load(config.file))
@@ -18,6 +20,7 @@ function Model:__init(config)
    end
    self.p = config.p or 0.5
    self.tensortype = torch.getdefaulttensortype()
+   
 end
 
 -- Get the parameters of the model
@@ -82,7 +85,7 @@ end
 function Model:changeSequentialDropouts(model,p)
    for i,m in ipairs(model.modules) do
       if m.module_name == "nn.Dropout" or torch.typename(m) == "nn.Dropout" then
-	   m.p = p
+      m.p = p
       end
    end
    return model
@@ -114,7 +117,7 @@ function Model:makeCleanSequential(model)
    for i = 1,#model.modules do
       local m = Model:makeCleanModule(model.modules[i])
       if m then
-	 new:add(m)
+    new:add(m)
       end
    end
    return new
@@ -146,10 +149,16 @@ function Model:createModule(m)
       return Model:createTranspose(m)
    elseif m.module == "nn.Tanh" then
       return Model:createTanh(m)
+   elseif m.module == "nn.ReLU" then
+      return Model:createReLU(m)
    elseif m.module == "nn.Sequencer" then
       return Model:createSequencer(m)
    elseif m.module == "nn.Mean" then
       return Model:createMean(m)
+   elseif m.module == "nn.SpatialConvolution" then
+      return Model:createSpatialConvolution(m)
+   elseif m.module == "nn.SpatialMaxPooling" then
+      return Model:createSpatialMaxPooling(m)
    else
       error("Unrecognized module for creation: "..tostring(m.module))
    end
@@ -158,7 +167,11 @@ end
 -- Make a clean module
 function Model:makeCleanModule(m)
    if torch.typename(m) == "nn.TemporalConvolution" then
-	 return Model:toTemporalConvolution(m)
+    return Model:toTemporalConvolution(m)
+   elseif torch.typename(m) == "nn.SpatialConvolution" then
+      return Model:toSpatialConvolution(m)
+   elseif torch.typename(m) == "nn.SpatialMaxPooling" then
+      return Model:toSpatialMaxPooling(m)
    elseif torch.typename(m) == "nn.Threshold" then
       return Model:newThreshold()
    elseif torch.typename(m) == "nn.TemporalMaxPooling" then
@@ -185,6 +198,8 @@ function Model:makeCleanModule(m)
       return Model:toMean(m)
    elseif torch.typename(m) == "nn.Tanh" then
       return Model:newTanh()
+   elseif torch.typename(m) == "nn.ReLU" then
+      return Model:newReLU()
    else
       error("Module unrecognized")
    end
@@ -224,6 +239,10 @@ function Model:createTanh(m)
    return nn.Tanh()
 end
 
+function Model:createReLU(m)
+   return nn.ReLU()
+end
+
 
 -- Create a new reshape model
 function Model:createReshape(m)
@@ -243,6 +262,14 @@ end
 -- Create a new Spatial Convolution model
 function Model:createTemporalConvolution(m)
    return nn.TemporalConvolution(m.inputFrameSize, m.outputFrameSize, m.kW, m.dW)
+end
+
+function Model:createSpatialConvolution(m)
+   return nn.SpatialConvolution(m.nInputPlane, m.nOutputPlane, m.kW, m.kH, m.dW, m.dH)
+end
+
+function Model:createSpatialMaxPooling(m)
+   return nn.SpatialMaxPooling(m.kW, m.kH, m.dW, m.dH)
 end
 
 -- Create a new spatial max pooling model
@@ -269,9 +296,17 @@ function Model:newTanh()
    return nn.Tanh()
 end
 
+function Model:newReLU()
+   return nn.ReLU()
+end
+
 -- Convert to a new max pooling
 function Model:toTemporalMaxPooling(m)
    return nn.TemporalMaxPooling(m.kW, m.dW)
+end
+
+function Model:toSpatialMaxPooling(m)
+   return nn.SpatialMaxPooling(m.kW, m.kH, m.dW, m.dH)
 end
 
 -- Convert to a new reshape
@@ -300,6 +335,13 @@ end
 -- Convert a convolution module to standard
 function Model:toTemporalConvolution(m)
    local new = nn.TemporalConvolution(m.inputFrameSize, m.outputFrameSize, m.kW, m.dW)
+   new.weight:copy(m.weight)
+   new.bias:copy(m.bias)
+   return new
+end
+
+function Model:toSpatialConvolution(m)
+   local new = nn.SpatialConvolution(m.nInputPlane, m.nOutputPlane, m.kW, m.kH, m.dW, m.dH)
    new.weight:copy(m.weight)
    new.bias:copy(m.bias)
    return new

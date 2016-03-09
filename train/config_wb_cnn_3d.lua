@@ -63,9 +63,9 @@ config.model[14] = {module = "nn.TemporalMaxPooling", kW = 3, dW = 3}
 -- 2 x 300
 --]]
 
-config.model[10] = {module = "nn.Reshape", dimension1 = 1280, dimension2 = nil, dimension3 = nil }
+config.model[10] = {module = "nn.Reshape", dimension1 = 4864, dimension2 = nil, dimension3 = nil }
 
-config.model[11] = {module = "nn.Linear", inputSize = 1280, outputSize = 1024}
+config.model[11] = {module = "nn.Linear", inputSize = 4864, outputSize = 1024}
 config.model[12] = {module = "nn.Threshold"}
 config.model[13] = {module = "nn.Dropout", p = 0.5}
 
